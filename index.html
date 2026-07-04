@@ -318,6 +318,47 @@
     animation: cellGlow 1.4s ease-in-out infinite alternate;
   }
 
+  .bingo-bars-wrap {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+  .progress-box {
+    flex: 1;
+    text-align: center;
+}
+
+  .progress-box .board-label {
+    margin-bottom: 6px;
+}
+
+  @media (max-width: 576px) {
+
+    .bingo-bars-wrap {
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .progress-box {
+        width: 100%;
+    }
+
+    .bingo-bar {
+        justify-content: center;
+        flex-wrap: nowrap;
+    }
+
+    .bingo-letter {
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
+    }
+}
+
   .cell.disabled { cursor: not-allowed; opacity: 0.7; }
 
   @keyframes cellPop {
@@ -734,7 +775,7 @@
         </svg>
         <span class="timer-num" id="timer-num">30</span>s
       </div>
-      <div style="display:flex;gap:14px">
+      <div style="display:none;gap:14px">
         <div>
           <div class="text-dim" style="font-size:0.72rem;margin-bottom:2px">YOUR LINES</div>
           <div class="score-num" id="your-lines">0</div>
@@ -747,7 +788,36 @@
     </div>
 
     <!-- BINGO letters bars -->
-    <div style="margin-bottom:12px; display: flex; justify-content: space-between;" id="bingo-bars-wrap">
+
+    <div id="bingo-bars-wrap" class="bingo-bars-wrap">
+    <div class="progress-box">
+        <div class="board-label you">Your Progress</div>
+
+        <div class="bingo-bar" id="bingo-bar-you">
+            <div class="bingo-letter" data-l="B">B</div>
+            <div class="bingo-letter" data-l="I">I</div>
+            <div class="bingo-letter" data-l="N">N</div>
+            <div class="bingo-letter" data-l="G">G</div>
+            <div class="bingo-letter" data-l="O">O</div>
+        </div>
+    </div>
+
+    <div class="progress-box">
+        <div class="board-label opponent" id="bingo-bar-opp-label">
+            Opponent Progress
+        </div>
+
+        <div class="bingo-bar" id="bingo-bar-opp">
+            <div class="bingo-letter" data-l="B">B</div>
+            <div class="bingo-letter" data-l="I">I</div>
+            <div class="bingo-letter" data-l="N">N</div>
+            <div class="bingo-letter" data-l="G">G</div>
+            <div class="bingo-letter" data-l="O">O</div>
+        </div>
+    </div>
+</div>
+    
+    <!--<div style="margin-bottom:12px; display: flex; justify-content: space-between;" id="bingo-bars-wrap">
       <div style="text-align:center;">
         <div class="board-label you" style="margin-bottom:6px">Your Progress</div>
         <div class="bingo-bar" id="bingo-bar-you">
@@ -768,7 +838,7 @@
           <div class="bingo-letter" data-l="O">O</div>
         </div>
       </div>
-    </div>
+    </div>-->
 
     <!-- Boards — player sees only their own board -->
     <div style="display:flex;justify-content:center;">
