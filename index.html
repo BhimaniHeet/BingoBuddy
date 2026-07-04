@@ -1,0 +1,1890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multiplayer Bingo</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%2313132b'/%3E%3Cstop offset='100%25' stop-color='%230d0d1a'/%3E%3C/linearGradient%3E%3Cfilter id='glow' x='-20%25' y='-20%25' width='140%25' height='140%25'%3E%3CfeGaussianBlur stdDeviation='3' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='100' height='100' rx='22' fill='url(%23bg)'/%3E%3Ccircle cx='50' cy='50' r='38' fill='none' stroke='%234fc3f7' stroke-width='3.5' filter='url(%23glow)' opacity='0.85'/%3E%3Ccircle cx='50' cy='50' r='28' fill='%23f48fb1' filter='url(%23glow)'/%3E%3Ccircle cx='50' cy='50' r='18' fill='%23ffffff'/%3E%3Ctext x='50' y='58' font-family='system-ui, sans-serif' font-weight='900' font-size='24' fill='%230d0d1a' text-anchor='middle'%3EB%3C/text%3E%3C/svg%3E">
+<style>
+  /* ============================================================
+     RESET & BASE
+  ============================================================ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg1: #0d0d1a;
+    --bg2: #13132b;
+    --glass: rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.13);
+    --neon-blue: #4fc3f7;
+    --neon-purple: #ce93d8;
+    --neon-green: #69f0ae;
+    --neon-pink: #f48fb1;
+    --neon-yellow: #fff176;
+    --danger: #ef5350;
+    --gold: #ffd700;
+    --text: #e0e0f0;
+    --text-dim: #8888aa;
+    --cell-size: clamp(46px, 11vw, 66px);
+    --radius: 14px;
+    --transition: 0.22s cubic-bezier(.4,0,.2,1);
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 50%, #1a0d2e 100%);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(78,115,210,0.14) 0%, transparent 70%),
+                radial-gradient(ellipse 60% 50% at 80% 100%, rgba(180,80,220,0.10) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ============================================================
+     LAYOUT
+  ============================================================ */
+  #app {
+    position: relative; z-index: 1;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+
+  .screen {
+    display: none;
+    width: 100%;
+    max-width: 520px;
+    animation: fadeSlideIn 0.38s ease both;
+  }
+  .screen.active { display: block; }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(24px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* ============================================================
+     GLASSMORPHISM CARD
+  ============================================================ */
+  .glass-card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-radius: 24px;
+    padding: 36px 32px;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
+  }
+
+  /* ============================================================
+     TYPOGRAPHY
+  ============================================================ */
+  .logo {
+    text-align: center;
+    margin-bottom: 8px;
+    font-size: clamp(2.2rem, 8vw, 3.2rem);
+    font-weight: 900;
+    letter-spacing: 8px;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple), var(--neon-pink));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-shadow: none;
+    filter: drop-shadow(0 0 18px rgba(79,195,247,0.4));
+  }
+
+  .tagline {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 36px;
+  }
+
+  h2 {
+    text-align: center;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--neon-blue);
+    margin-bottom: 20px;
+    letter-spacing: 1px;
+  }
+
+  /* ============================================================
+     BUTTONS
+  ============================================================ */
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 14px 20px;
+    border: none; border-radius: 12px;
+    font-size: 1rem; font-weight: 700;
+    cursor: pointer;
+    transition: all var(--transition);
+    position: relative; overflow: hidden;
+    letter-spacing: 0.5px;
+  }
+
+  .btn::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: rgba(255,255,255,0.08);
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+  .btn:hover::after { opacity: 1; }
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #4fc3f7 0%, #7c4dff 100%);
+    color: #fff;
+    box-shadow: 0 4px 24px rgba(79,195,247,0.3);
+  }
+  .btn-primary:hover { box-shadow: 0 6px 32px rgba(79,195,247,0.5); transform: translateY(-2px); }
+
+  .btn-secondary {
+    background: linear-gradient(135deg, #ce93d8 0%, #7c4dff 100%);
+    color: #fff;
+    box-shadow: 0 4px 24px rgba(206,147,216,0.25);
+  }
+  .btn-secondary:hover { box-shadow: 0 6px 32px rgba(206,147,216,0.4); transform: translateY(-2px); }
+
+  .btn-success {
+    background: linear-gradient(135deg, #69f0ae 0%, #00bcd4 100%);
+    color: #0d1a14;
+    box-shadow: 0 4px 24px rgba(105,240,174,0.25);
+  }
+  .btn-success:hover { box-shadow: 0 6px 32px rgba(105,240,174,0.4); transform: translateY(-2px); }
+
+  .btn-danger {
+    background: linear-gradient(135deg, #ef5350 0%, #c62828 100%);
+    color: #fff;
+    box-shadow: 0 4px 24px rgba(239,83,80,0.2);
+  }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--glass-border);
+    color: var(--text);
+  }
+  .btn-outline:hover { background: var(--glass); border-color: var(--neon-blue); }
+
+  .btn + .btn { margin-top: 12px; }
+  .btn:disabled { opacity: 0.42; cursor: not-allowed; transform: none !important; }
+
+  /* ============================================================
+     INPUTS
+  ============================================================ */
+  .input-wrap { margin-bottom: 16px; }
+  .input-wrap label { display: block; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 1px; text-transform: uppercase; }
+
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 13px 16px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  input:focus { border-color: var(--neon-blue); box-shadow: 0 0 0 3px rgba(79,195,247,0.15); }
+  input::placeholder { color: var(--text-dim); }
+
+  /* ============================================================
+     ROOM CODE DISPLAY
+  ============================================================ */
+  .room-code-display {
+    text-align: center;
+    padding: 20px;
+    background: rgba(79,195,247,0.08);
+    border: 1px dashed rgba(79,195,247,0.35);
+    border-radius: 14px;
+    margin: 16px 0;
+  }
+  .room-code-display .label { font-size: 0.78rem; color: var(--text-dim); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .room-code-display .code {
+    font-size: 2.4rem; font-weight: 900; letter-spacing: 10px;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+
+  /* ============================================================
+     WAITING SPINNER
+  ============================================================ */
+  .spinner {
+    width: 48px; height: 48px; margin: 20px auto;
+    border: 3px solid rgba(79,195,247,0.15);
+    border-top-color: var(--neon-blue);
+    border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .waiting-text { text-align: center; color: var(--text-dim); font-size: 0.95rem; margin-top: 8px; }
+
+  /* ============================================================
+     BINGO BOARD GRID
+  ============================================================ */
+  #game-screen { max-width: 720px; }
+
+  .game-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .board-section { }
+
+  .board-label {
+    font-size: 0.78rem; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 10px; text-align: center;
+  }
+  .board-label.you { color: var(--neon-green); }
+  .board-label.opponent { color: var(--neon-pink); }
+
+  .bingo-grid {
+    display: grid;
+    grid-template-columns: repeat(5, var(--cell-size));
+    grid-template-rows: repeat(5, var(--cell-size));
+    gap: 5px;
+    justify-content: center;
+  }
+
+  .bingo-grid input {
+    width: var(--cell-size); height: var(--cell-size);
+    text-align: center;
+    font-size: clamp(0.9rem, 3vw, 1.1rem);
+    font-weight: 700;
+    padding: 0;
+    border-radius: 10px;
+  }
+
+  .cell {
+    width: var(--cell-size); height: var(--cell-size);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    font-size: clamp(0.85rem, 3vw, 1.05rem);
+    font-weight: 700;
+    cursor: pointer;
+    border: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.05);
+    transition: all var(--transition);
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+    color: var(--text);
+  }
+
+  .cell::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.12), transparent 70%);
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+
+  .cell:hover:not(.selected):not(.disabled) {
+    border-color: var(--neon-blue);
+    box-shadow: 0 0 14px rgba(79,195,247,0.35);
+    transform: scale(1.07);
+  }
+  .cell:hover:not(.selected):not(.disabled)::before { opacity: 1; }
+
+  .cell.selected {
+    background: linear-gradient(135deg, rgba(79,195,247,0.25), rgba(124,77,255,0.22));
+    border-color: var(--neon-blue);
+    color: var(--neon-blue);
+    box-shadow: 0 0 16px rgba(79,195,247,0.4), inset 0 0 10px rgba(79,195,247,0.1);
+    animation: cellPop 0.35s cubic-bezier(.3,1.5,.5,1) both;
+    cursor: default;
+    text-decoration: line-through;
+    text-decoration-color: rgba(79,195,247,0.6);
+  }
+
+  .cell.line-complete {
+    background: linear-gradient(135deg, rgba(105,240,174,0.28), rgba(0,188,212,0.22));
+    border-color: var(--neon-green);
+    color: var(--neon-green);
+    box-shadow: 0 0 20px rgba(105,240,174,0.45);
+    animation: cellGlow 1.4s ease-in-out infinite alternate;
+  }
+
+  .cell.disabled { cursor: not-allowed; opacity: 0.7; }
+
+  @keyframes cellPop {
+    0%   { transform: scale(0.75); opacity: 0.5; }
+    60%  { transform: scale(1.12); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes cellGlow {
+    from { box-shadow: 0 0 10px rgba(105,240,174,0.35); }
+    to   { box-shadow: 0 0 28px rgba(105,240,174,0.7), 0 0 60px rgba(105,240,174,0.2); }
+  }
+
+  /* ============================================================
+     BINGO LETTERS BAR
+  ============================================================ */
+  .bingo-bar {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin: 10px 0;
+  }
+
+  .bingo-letter {
+    width: clamp(32px, 8vw, 42px);
+    height: clamp(32px, 8vw, 42px);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    font-size: clamp(0.95rem, 3vw, 1.2rem);
+    font-weight: 900;
+    letter-spacing: 1px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.04);
+    color: var(--text-dim);
+    transition: all 0.4s ease;
+  }
+
+  .bingo-letter.lit {
+    background: linear-gradient(135deg, #4fc3f7, #7c4dff);
+    border-color: var(--neon-blue);
+    color: #fff;
+    box-shadow: 0 0 18px rgba(79,195,247,0.5);
+    animation: letterPop 0.5s cubic-bezier(.3,1.5,.5,1) both;
+  }
+
+  @keyframes letterPop {
+    0%   { transform: scale(0.6) rotate(-10deg); }
+    60%  { transform: scale(1.18) rotate(3deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+
+  /* ============================================================
+     HUD – Turn / Timer / Status
+  ============================================================ */
+  .hud {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    margin-bottom: 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .turn-indicator {
+    font-size: 0.88rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    flex-shrink: 0;
+  }
+  .turn-indicator.your-turn {
+    background: rgba(105,240,174,0.18);
+    color: var(--neon-green);
+    border: 1px solid rgba(105,240,174,0.3);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .turn-indicator.opp-turn {
+    background: rgba(244,143,177,0.15);
+    color: var(--neon-pink);
+    border: 1px solid rgba(244,143,177,0.25);
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(105,240,174,0.3); }
+    50% { box-shadow: 0 0 0 8px rgba(105,240,174,0); }
+  }
+
+  .timer-wrap {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 1rem; font-weight: 800;
+    color: var(--neon-yellow);
+  }
+  .timer-wrap svg { flex-shrink: 0; }
+  .timer-num { min-width: 26px; text-align: center; }
+  .timer-num.danger { color: var(--danger); animation: timerBlink 0.5s ease infinite alternate; }
+  @keyframes timerBlink { from { opacity: 1; } to { opacity: 0.4; } }
+
+  .msg-bar {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    padding: 6px 0;
+  }
+  .msg-bar.error { color: var(--danger); }
+  .msg-bar.success { color: var(--neon-green); }
+  .msg-bar.info { color: var(--neon-blue); }
+
+  /* ============================================================
+     VALIDATION MESSAGE
+  ============================================================ */
+  .validation-msg {
+    text-align: center;
+    font-size: 0.82rem;
+    min-height: 20px;
+    margin: 6px 0;
+    transition: color 0.2s;
+  }
+  .validation-msg.error { color: var(--danger); }
+  .validation-msg.ok    { color: var(--neon-green); }
+
+  /* ============================================================
+     POPUP / MODAL
+  ============================================================ */
+  .overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(6px);
+    align-items: center; justify-content: center;
+  }
+  .overlay.active { display: flex; }
+
+  .popup {
+    background: linear-gradient(145deg, #18184a, #1e0e3a);
+    border: 1px solid var(--glass-border);
+    border-radius: 24px;
+    padding: 40px 32px;
+    text-align: center;
+    max-width: 360px; width: 90%;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.7);
+    animation: popupIn 0.45s cubic-bezier(.3,1.5,.5,1) both;
+  }
+
+  @keyframes popupIn {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  .popup .trophy { font-size: 3.5rem; margin-bottom: 10px; animation: bounce 0.8s ease infinite alternate; }
+  @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+
+  .popup h2 { font-size: 1.8rem; color: var(--gold); margin-bottom: 8px; letter-spacing: 2px; }
+  .popup .winner-name { font-size: 1.1rem; color: var(--text); margin-bottom: 24px; }
+
+  /* ============================================================
+     OPPONENT LEFT POPUP & PLAY-AGAIN REQUEST POPUP
+  ============================================================ */
+  .popup-icon-big { font-size: 3.2rem; margin-bottom: 10px; }
+  .popup-sub { font-size: 0.88rem; color: var(--text-dim); margin-bottom: 20px; line-height: 1.5; }
+  .popup-danger h2 { color: var(--danger); }
+  .popup-info h2 { color: var(--neon-blue); }
+  .popup-request h2 { color: var(--neon-purple); }
+
+  /* ============================================================
+     CONFETTI
+  ============================================================ */
+  #confetti-canvas {
+    position: fixed; inset: 0; z-index: 199;
+    pointer-events: none;
+  }
+
+  /* ============================================================
+     SCOREBOARD (lines count)
+  ============================================================ */
+  .score-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.82rem; color: var(--text-dim);
+    padding: 4px 0;
+  }
+  .score-num { font-size: 1.1rem; font-weight: 800; color: var(--neon-blue); }
+
+  /* ============================================================
+     WINS SCOREBOARD (match wins across rematches)
+  ============================================================ */
+  .wins-row {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .wins-box {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    border-radius: 12px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+  }
+  .wins-box.you { border-color: rgba(105,240,174,0.3); }
+  .wins-box.opp { border-color: rgba(244,143,177,0.25); }
+  .wins-name {
+    font-size: 0.76rem;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .wins-box.you .wins-name { color: var(--neon-green); }
+  .wins-box.opp .wins-name { color: var(--neon-pink); }
+  .wins-num {
+    font-size: 1.6rem;
+    font-weight: 900;
+  }
+  .wins-box.you .wins-num { color: var(--neon-green); }
+  .wins-box.opp .wins-num { color: var(--neon-pink); }
+
+  /* ============================================================
+     BOARDS SIDE BY SIDE ON DESKTOP
+  ============================================================ */
+  .boards-wrap {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  @media (min-width: 680px) {
+    .boards-wrap {
+      grid-template-columns: 1fr 1fr;
+    }
+    #game-screen { max-width: 900px; }
+  }
+
+  /* ============================================================
+     SETUP GRID INPUTS
+  ============================================================ */
+  .setup-grid {
+    display: grid;
+    grid-template-columns: repeat(5, var(--cell-size));
+    grid-template-rows: repeat(5, var(--cell-size));
+    gap: 5px;
+    justify-content: center;
+    margin: 12px auto;
+  }
+
+  .setup-grid input {
+    width: var(--cell-size); height: var(--cell-size);
+    text-align: center;
+    font-size: clamp(0.85rem, 3vw, 1.05rem);
+    font-weight: 700;
+    padding: 0;
+    border-radius: 10px;
+    -moz-appearance: textfield;
+  }
+  .setup-grid input::-webkit-inner-spin-button,
+  .setup-grid input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  .setup-grid input.dup { border-color: var(--danger) !important; box-shadow: 0 0 8px rgba(239,83,80,0.4); }
+
+  /* ============================================================
+     SMALL UTILITIES
+  ============================================================ */
+  .spacer { height: 12px; }
+  .text-center { text-align: center; }
+  .text-dim { color: var(--text-dim); font-size: 0.85rem; }
+
+  /* Player name badge */
+  .player-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .badge-you  { background: rgba(105,240,174,0.15); color: var(--neon-green); border: 1px solid rgba(105,240,174,0.3); }
+  .badge-opp  { background: rgba(244,143,177,0.12); color: var(--neon-pink);  border: 1px solid rgba(244,143,177,0.25); }
+
+  /* Header strip */
+  .game-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap; gap: 8px;
+  }
+  .game-title {
+    font-size: 1.4rem; font-weight: 900; letter-spacing: 6px;
+    background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============================================================
+       LANDING SCREEN
+  ============================================================ -->
+  <div id="landing-screen" class="screen active">
+    <div class="glass-card">
+      <div class="logo">BINGO BRO</div>
+      <div class="tagline">Multiplayer · Real-time</div>
+      <button class="btn btn-primary" onclick="startCreateRoom()">🎯 Create Room</button>
+      <button class="btn btn-secondary" onclick="startJoinRoom()">🚪 Join Room</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       CREATE ROOM SCREEN
+  ============================================================ -->
+  <div id="create-screen" class="screen">
+    <div class="glass-card">
+      <h2>Create Room</h2>
+      <div class="input-wrap">
+        <label>Your Name</label>
+        <input type="text" id="create-name" placeholder="Enter your name" maxlength="20">
+      </div>
+      <button class="btn btn-primary" onclick="createRoom()">Generate Room</button>
+      <div class="spacer"></div>
+      <button class="btn btn-outline" onclick="showScreen('landing-screen')">← Back</button>
+
+      <div id="create-room-info" style="display:none">
+        <div class="room-code-display">
+          <div class="label">Room Code</div>
+          <div class="code" id="room-code-text">------</div>
+        </div>
+        <button class="btn btn-outline" onclick="copyRoomCode()" id="copy-btn">📋 Copy Room Code</button>
+        <div class="spacer"></div>
+        <div class="spinner"></div>
+        <div class="waiting-text">Waiting for opponent to join…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       JOIN ROOM SCREEN
+  ============================================================ -->
+  <div id="join-screen" class="screen">
+    <div class="glass-card">
+      <h2>Join Room</h2>
+      <div class="input-wrap">
+        <label>Your Name</label>
+        <input type="text" id="join-name" placeholder="Enter your name" maxlength="20">
+      </div>
+      <div class="input-wrap">
+        <label>Room Code</label>
+        <input type="text" id="join-code" placeholder="Enter 6-character code" maxlength="6" style="text-transform:uppercase;letter-spacing:4px;">
+      </div>
+      <div class="msg-bar error" id="join-error"></div>
+      <button class="btn btn-secondary" onclick="joinRoom()">Join Game</button>
+      <div class="spacer"></div>
+      <button class="btn btn-outline" onclick="showScreen('landing-screen')">← Back</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       SETUP SCREEN  (fill board)
+  ============================================================ -->
+  <div id="setup-screen" class="screen">
+    <div class="glass-card">
+      <h2>Set Your Board</h2>
+      <p class="text-dim text-center">Fill every cell with a unique number from 1–25</p>
+      <button class="btn btn-secondary" id="random-fill-btn" onclick="fillRandom()" style="margin-top:12px;margin-bottom:4px;">🎲 Fill Random Numbers</button>
+      <div class="setup-grid" id="setup-grid"></div>
+      <div class="validation-msg" id="setup-msg"></div>
+      <button class="btn btn-success" id="ready-btn" onclick="submitReady()" disabled>✅ Ready!</button>
+      <div class="spacer"></div>
+      <div id="waiting-ready-msg" style="display:none">
+        <div class="spinner"></div>
+        <div class="waiting-text">Board locked. Waiting for opponent to be ready…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       GAME SCREEN
+  ============================================================ -->
+  <div id="game-screen" class="screen">
+    <div class="game-header">
+      <div class="game-title">BINGO</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="player-badge badge-you" id="hud-you-name">You</span>
+        <span style="color:var(--text-dim);font-size:0.8rem">vs</span>
+        <span class="player-badge badge-opp" id="hud-opp-name">Opponent</span>
+      </div>
+    </div>
+
+    <!-- WINS SCOREBOARD (matches won across rematches) -->
+    <div class="wins-row" id="wins-row">
+      <div class="wins-box you">
+        <div class="wins-name" id="wins-you-name">You</div>
+        <div class="wins-num" id="wins-you-num">0</div>
+      </div>
+      <div class="wins-box opp">
+        <div class="wins-name" id="wins-opp-name">Opponent</div>
+        <div class="wins-num" id="wins-opp-num">0</div>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div class="hud">
+      <div class="turn-indicator your-turn" id="turn-indicator">Your Turn</div>
+      <div class="timer-wrap">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span class="timer-num" id="timer-num">30</span>s
+      </div>
+      <div style="display:flex;gap:14px">
+        <div>
+          <div class="text-dim" style="font-size:0.72rem;margin-bottom:2px">YOUR LINES</div>
+          <div class="score-num" id="your-lines">0</div>
+        </div>
+        <div>
+          <div class="text-dim" style="font-size:0.72rem;margin-bottom:2px">OPP LINES</div>
+          <div class="score-num" id="opp-lines">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BINGO letters bars -->
+    <div style="margin-bottom:12px; display: flex; justify-content: space-between;" id="bingo-bars-wrap">
+      <div style="text-align:center;">
+        <div class="board-label you" style="margin-bottom:6px">Your Progress</div>
+        <div class="bingo-bar" id="bingo-bar-you">
+          <div class="bingo-letter" data-l="B">B</div>
+          <div class="bingo-letter" data-l="I">I</div>
+          <div class="bingo-letter" data-l="N">N</div>
+          <div class="bingo-letter" data-l="G">G</div>
+          <div class="bingo-letter" data-l="O">O</div>
+        </div>
+      </div>
+      <div style="text-align:center;margin-top:10px;">
+        <div class="board-label opponent" style="margin-bottom:6px" id="bingo-bar-opp-label">Opponent Progress</div>
+        <div class="bingo-bar" id="bingo-bar-opp">
+          <div class="bingo-letter" data-l="B">B</div>
+          <div class="bingo-letter" data-l="I">I</div>
+          <div class="bingo-letter" data-l="N">N</div>
+          <div class="bingo-letter" data-l="G">G</div>
+          <div class="bingo-letter" data-l="O">O</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Boards — player sees only their own board -->
+    <div style="display:flex;justify-content:center;">
+      <div class="board-section">
+        <div class="board-label you" style="text-align:center;margin-bottom:10px;">Your Board</div>
+        <div class="bingo-grid" id="your-board"></div>
+        <!-- opp-board hidden: still rendered for line counting but invisible -->
+        <div id="opp-board" style="display:none;"></div>
+      </div>
+    </div>
+
+    <div class="msg-bar info" id="game-msg" style="margin-top:10px"></div>
+    <div class="spacer"></div>
+    <button class="btn btn-outline btn-danger" onclick="leaveRoom()" style="margin-top:4px;font-size:0.82rem;padding:10px">🚪 Leave Room</button>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     GAME OVER POPUP  (shown to BOTH players on win/loss)
+============================================================ -->
+<div class="overlay" id="winner-overlay">
+  <div class="popup">
+    <div class="trophy" id="WinnerIcon">🏆</div>
+    <h2 id="popup-title">You Win!</h2>
+    <div class="winner-name" id="popup-winner-name"></div>
+    <!-- Normal buttons: Play Again + Leave -->
+    <div id="winner-actions">
+      <button class="btn btn-success" id="play-again-btn" onclick="playAgain()" style="margin-bottom:10px">🔄 Play Again</button>
+      <button class="btn btn-outline" onclick="leaveRoom()">🚪 Leave Room</button>
+    </div>
+    <!-- Shown after clicking Play Again: waiting for opponent -->
+    <div id="waiting-rematch" style="display:none">
+      <div class="spinner" style="margin:10px auto 6px"></div>
+      <div class="waiting-text" style="margin-bottom:16px">Waiting for opponent…</div>
+      <button class="btn btn-outline" onclick="leaveRoom()">🚪 Leave Room</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="confetti-canvas"></canvas>
+
+<!-- ============================================================
+     OPPONENT LEFT POPUP
+============================================================ -->
+<div class="overlay" id="opp-left-overlay">
+  <div class="popup popup-danger">
+    <div class="popup-icon-big">🚶</div>
+    <h2>Opponent Left</h2>
+    <div class="winner-name" id="opp-left-name"></div>
+    <div class="popup-sub">Your opponent has left the room.<br>The game has ended.</div>
+    <button class="btn btn-danger" onclick="doLeaveAfterOppLeft()" style="margin-bottom:0">🚪 Exit</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     PLAY AGAIN REQUEST POPUP  (shown to the OTHER player)
+============================================================ -->
+<div class="overlay" id="play-again-request-overlay">
+  <div class="popup popup-request">
+    <div class="popup-icon-big">🎮</div>
+    <h2>Play Again?</h2>
+    <div class="winner-name" id="play-again-requester-name"></div>
+    <div class="popup-sub">wants to play another round!<br>Do you accept?</div>
+    <button class="btn btn-success" onclick="acceptPlayAgain()" style="margin-bottom:10px">✅ Accept</button>
+    <button class="btn btn-danger" onclick="declinePlayAgain()">❌ Decline</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     PLAY AGAIN DECLINED POPUP  (shown to BOTH players when declined)
+============================================================ -->
+<div class="overlay" id="play-again-declined-overlay">
+  <div class="popup popup-danger">
+    <div class="popup-icon-big">😔</div>
+    <h2>Rematch Declined</h2>
+    <div class="popup-sub" id="declined-msg">Your opponent declined the rematch.<br>Both players will return to the lobby.</div>
+    <button class="btn btn-outline" onclick="doLeaveAfterDecline()">🚪 Exit</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     FIREBASE SDK
+============================================================ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore, doc, setDoc, getDoc, updateDoc,
+    onSnapshot, deleteDoc, serverTimestamp, increment
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  /* ================================================================
+     🔥 FIREBASE CONFIG — Replace with your own project credentials
+  ================================================================ */
+  const firebaseConfig = {
+    apiKey: "AIzaSyANPcBvQRvGZh66EFbqxJtoJPM5w9U-epI",
+    authDomain: "heetbingoproject.firebaseapp.com",
+    projectId: "heetbingoproject",
+    storageBucket: "heetbingoproject.firebasestorage.app",
+    messagingSenderId: "787775375712",
+    appId: "1:787775375712:web:d19aba3cb986f7fceeb605"
+  };
+
+  const firebaseApp = initializeApp(firebaseConfig);
+  const db = getFirestore(firebaseApp);
+
+  /* ================================================================
+     AUDIO ENGINE  (Web Audio API – no external files)
+  ================================================================ */
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  let audioCtx = null;
+
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new AudioCtx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function playTone(freq, type = 'sine', dur = 0.12, vol = 0.22, delay = 0) {
+    try {
+      ensureAudio();
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.connect(g); g.connect(audioCtx.destination);
+      o.type = type; o.frequency.value = freq;
+      const t = audioCtx.currentTime + delay;
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.start(t); o.stop(t + dur);
+    } catch(e) {}
+  }
+
+  const Sounds = {
+    click: () => playTone(600, 'sine', 0.08, 0.18),
+    select: () => {
+      playTone(440, 'sine', 0.12, 0.22);
+      playTone(660, 'sine', 0.10, 0.16, 0.08);
+    },
+    turnChange: () => {
+      playTone(330, 'triangle', 0.15, 0.2);
+      playTone(440, 'triangle', 0.15, 0.2, 0.1);
+    },
+    lineComplete: () => {
+      [523, 659, 784, 1047].forEach((f, i) => playTone(f, 'sine', 0.15, 0.25, i * 0.08));
+    },
+    winner: () => {
+      [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => playTone(f, 'sine', 0.22, 0.28, i * 0.09));
+    }
+  };
+
+  /* ================================================================
+     STATE
+  ================================================================ */
+  let state = {
+    roomId: null,
+    playerId: null,      // 'p1' or 'p2'
+    playerName: '',
+    opponentName: '',
+    myBoard: [],         // 25 numbers
+    opponentBoard: [],
+    selectedNums: [],    // globally selected numbers
+    myLines: 0,
+    oppLines: 0,
+    currentTurn: 'p2',  // p2 goes first
+    lastMoverId: null,   // who made the most recent move ('p1' | 'p2')
+    myWins: 0,
+    oppWins: 0,
+    gameStarted: false,
+    gameOver: false,
+    timerInterval: null,
+    timerSeconds: 30,
+    unsubRoom: null,
+    playAgainSent: false,       // did I send play-again request?
+    playAgainReceived: false,   // did I receive play-again request?
+  };
+
+  /* ================================================================
+     SCREEN MANAGER
+  ================================================================ */
+  window.showScreen = function(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  };
+
+  /* ================================================================
+     LANDING
+  ================================================================ */
+  window.startCreateRoom = function() {
+    Sounds.click();
+    showScreen('create-screen');
+  };
+
+  window.startJoinRoom = function() {
+    Sounds.click();
+    showScreen('join-screen');
+  };
+
+  /* ================================================================
+     CREATE ROOM
+  ================================================================ */
+  window.createRoom = async function() {
+    Sounds.click();
+    const name = document.getElementById('create-name').value.trim() || 'Player 1';
+    const code = generateCode();
+    state.roomId = code;
+    state.playerId = 'p1';
+    state.playerName = name;
+
+    try {
+      await setDoc(doc(db, 'rooms', code), {
+        p1Name: name,
+        p2Name: '',
+        p1Board: [],
+        p2Board: [],
+        p1Ready: false,
+        p2Ready: false,
+        selectedNums: [],
+        currentTurn: 'p2',
+        lastMoverId: '',
+        p1Wins: 0,
+        p2Wins: 0,
+        winner: '',
+        gameOver: false,
+        leftBy: '',
+        leftAt: null,
+        playAgainRequest: '',
+        playAgainDeclined: false,
+        playAgainAccepted: false,
+        createdAt: serverTimestamp()
+      });
+
+      document.getElementById('room-code-text').textContent = code;
+      document.getElementById('create-room-info').style.display = 'block';
+      document.querySelector('#create-screen .btn-primary').style.display = 'none';
+      document.querySelector('#create-screen .btn-outline').style.display = 'none';
+      document.querySelector('#create-screen .input-wrap').style.display = 'none';
+
+      // Listen for p2 joining
+      state.unsubRoom = onSnapshot(doc(db, 'rooms', code), snap => {
+        if (!snap.exists()) return;
+        const d = snap.data();
+        if (d.p2Name && !state.gameStarted) {
+          state.opponentName = d.p2Name;
+          cleanupListener();
+          goToSetup();
+        }
+      });
+
+    } catch(e) {
+      alert('Failed to create room: ' + e.message);
+    }
+  };
+
+  /* ================================================================
+     JOIN ROOM
+  ================================================================ */
+  window.joinRoom = async function() {
+    Sounds.click();
+    const name = document.getElementById('join-name').value.trim() || 'Player 2';
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    const errEl = document.getElementById('join-error');
+    errEl.textContent = '';
+
+    if (code.length !== 6) { errEl.textContent = 'Please enter a valid 6-character code.'; return; }
+
+    try {
+      const snap = await getDoc(doc(db, 'rooms', code));
+      if (!snap.exists()) { errEl.textContent = 'Room not found. Check the code and try again.'; return; }
+      const d = snap.data();
+      if (d.p2Name) { errEl.textContent = 'Room is full.'; return; }
+
+      state.roomId = code;
+      state.playerId = 'p2';
+      state.playerName = name;
+      state.opponentName = d.p1Name;
+
+      await updateDoc(doc(db, 'rooms', code), { p2Name: name });
+      goToSetup();
+
+    } catch(e) {
+      errEl.textContent = 'Error: ' + e.message;
+    }
+  };
+
+  /* ================================================================
+     SETUP SCREEN
+  ================================================================ */
+  // function goToSetup() {
+  //   showScreen('setup-screen');
+  //   buildSetupGrid();
+  // }
+
+  /* ================================================================
+     SETUP SCREEN
+  =============================================================== */
+  function goToSetup() {
+    showScreen('setup-screen');
+    buildSetupGrid();
+
+    // Always reset setup UI to fresh state
+    document.getElementById('ready-btn').style.display = 'block';
+    document.getElementById('random-fill-btn').style.display = 'block';
+    document.getElementById('waiting-ready-msg').style.display = 'none';
+    document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = false);
+    const b = document.getElementById('opp-ready-banner');
+    if (b) { b.style.display = 'none'; b.textContent = ''; }
+
+    // Start listening for readiness immediately when setup screen opens
+    cleanupListener();
+    state.unsubRoom = onSnapshot(doc(db, 'rooms', state.roomId), snap => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+
+      // Check if both are ready to start the game
+      if (d.p1Ready && d.p2Ready && !state.gameStarted) {
+        state.opponentBoard = state.playerId === 'p1' ? d.p2Board : d.p1Board;
+        if (!state.opponentBoard || state.opponentBoard.length < 25) return;
+        cleanupListener();
+        startGame(d);
+        return;
+      }
+
+      // Check opponent status to show notice to the player who is still typing
+      const opponentReady = state.playerId === 'p1' ? d.p2Ready : d.p1Ready;
+      const setupMsgElement = document.getElementById('setup-msg');
+      const waitingTextElement = document.querySelector('#waiting-ready-msg .waiting-text');
+
+      if (opponentReady) {
+        if (document.getElementById('ready-btn').style.display !== 'none') {
+          setupMsgElement.className = 'validation-msg ok';
+          setupMsgElement.textContent = `📢 ${state.opponentName} is ready and waiting for you!`;
+        } else if (waitingTextElement) {
+          waitingTextElement.textContent = `${state.opponentName} is ready! Loading game...`;
+        }
+      }
+    });
+  }
+
+  function buildSetupGrid() {
+    const grid = document.getElementById('setup-grid');
+    grid.innerHTML = '';
+    for (let i = 0; i < 25; i++) {
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.min = 1; inp.max = 25;
+      //inp.placeholder = i + 1;
+      inp.addEventListener('input', validateSetup);
+
+          inp.addEventListener('input', (e) => {
+        validateSetup();
+
+        // if (e.target.value.length > 0) {
+        //     const next = e.target.parentElement.children[i + 1];
+        //     if (next) next.focus();
+        // }
+    });
+
+    inp.addEventListener('keydown', (e) => {
+        const inputs = grid.querySelectorAll('input');
+
+        if (e.key === 'ArrowRight' && inputs[i + 1]) {
+            inputs[i + 1].focus();
+        }
+
+        if (e.key === 'ArrowLeft' && inputs[i - 1]) {
+            inputs[i - 1].focus();
+        }
+
+        if (e.key === 'ArrowDown' && inputs[i + 5]) {
+            inputs[i + 5].focus();
+        }
+
+        if (e.key === 'ArrowUp' && inputs[i - 5]) {
+            inputs[i - 5].focus();
+        }
+
+        if (e.key === 'Enter' && inputs[i + 1]) {
+            inputs[i + 1].focus();
+        }
+    });
+
+      grid.appendChild(inp);
+    }
+    validateSetup();
+  }
+
+  /* ================================================================
+     FILL RANDOM  — shuffles 1-25 and fills the grid
+  ================================================================ */
+  window.fillRandom = function() {
+    Sounds.click();
+    // Generate shuffled array of 1-25
+    const nums = Array.from({length: 25}, (_, i) => i + 1);
+    for (let i = nums.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [nums[i], nums[j]] = [nums[j], nums[i]];
+    }
+    const inputs = document.querySelectorAll('#setup-grid input');
+    inputs.forEach((inp, i) => {
+      inp.value = nums[i];
+      inp.classList.remove('dup');
+    });
+    validateSetup();
+  };
+
+  function getSetupValues() {
+    return Array.from(document.querySelectorAll('#setup-grid input')).map(i => i.value.trim());
+  }
+
+  function validateSetup() {
+    const vals = getSetupValues();
+    const nums = vals.map(v => parseInt(v));
+    const msg = document.getElementById('setup-msg');
+    const btn = document.getElementById('ready-btn');
+
+    // Reset dup highlights
+    document.querySelectorAll('#setup-grid input').forEach(i => i.classList.remove('dup'));
+
+    let errors = [];
+    // Check empty
+    const filled = nums.filter(n => !isNaN(n));
+    if (filled.length < 25) errors.push(`${25 - filled.length} cells still empty`);
+
+    // Check range
+    const outRange = nums.filter(n => !isNaN(n) && (n < 1 || n > 25));
+    if (outRange.length) errors.push('All numbers must be 1–25');
+
+    // Check duplicates
+    const seen = {}; const dups = new Set();
+    nums.forEach((n, idx) => {
+      if (isNaN(n)) return;
+      if (seen[n] !== undefined) { dups.add(idx); dups.add(seen[n]); }
+      else seen[n] = idx;
+    });
+    if (dups.size) {
+      dups.forEach(i => document.querySelectorAll('#setup-grid input')[i].classList.add('dup'));
+      errors.push('Duplicate numbers detected');
+    }
+
+    if (errors.length) {
+      msg.className = 'validation-msg error';
+      msg.textContent = errors.join(' · ');
+      btn.disabled = true;
+    } else {
+      msg.className = 'validation-msg ok';
+      msg.textContent = '✓ Board looks good!';
+      btn.disabled = false;
+    }
+  }
+
+  /* ================================================================
+     READY
+  ================================================================ */
+  // window.submitReady = async function() {
+  //   Sounds.click();
+  //   const vals = getSetupValues();
+  //   const nums = vals.map(v => parseInt(v));
+  //   state.myBoard = nums;
+
+  //   // Lock inputs
+  //   document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = true);
+  //   document.getElementById('ready-btn').style.display = 'none';
+  //   document.getElementById('random-fill-btn').style.display = 'none';
+  //   document.getElementById('waiting-ready-msg').style.display = 'block';
+
+  //   const field = state.playerId === 'p1' ? { p1Board: nums, p1Ready: true } : { p2Board: nums, p2Ready: true };
+  //   await updateDoc(doc(db, 'rooms', state.roomId), field);
+
+  //   // Listen for both ready
+  //   state.unsubRoom = onSnapshot(doc(db, 'rooms', state.roomId), snap => {
+  //     if (!snap.exists()) return;
+  //     const d = snap.data();
+  //     if (d.p1Ready && d.p2Ready && !state.gameStarted) {
+  //       state.opponentBoard = state.playerId === 'p1' ? d.p2Board : d.p1Board;
+  //       if (!state.opponentBoard || state.opponentBoard.length < 25) return;
+  //       cleanupListener();
+  //       startGame(d);
+  //     }
+  //   });
+  // };
+  /* ================================================================
+     READY
+  =============================================================== */
+  window.submitReady = async function() {
+    Sounds.click();
+    const vals = getSetupValues();
+    const nums = vals.map(v => parseInt(v));
+    state.myBoard = nums;
+
+    // Lock inputs locally
+    document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = true);
+    document.getElementById('ready-btn').style.display = 'none';
+    document.getElementById('random-fill-btn').style.display = 'none';
+    
+    // Set default waiting text before database updates it
+    const waitingTextElement = document.querySelector('#waiting-ready-msg .waiting-text');
+    waitingTextElement.textContent = `Board locked. Waiting for ${state.opponentName} to be ready…`;
+    document.getElementById('waiting-ready-msg').style.display = 'block';
+
+    const field = state.playerId === 'p1' ? { p1Ready: true } : { p2Ready: true };
+    const boardField = state.playerId === 'p1' ? { p1Board: nums } : { p2Board: nums };
+    
+    // Update Firebase (The listener in goToSetup will handle the transition automatically)
+    await updateDoc(doc(db, 'rooms', state.roomId), { ...field, ...boardField });
+  };
+
+  /* ================================================================
+     GAME START
+  ================================================================ */
+  function startGame(roomData) {
+    state.gameStarted = true;
+    state.selectedNums = roomData.selectedNums || [];
+    state.currentTurn = roomData.currentTurn || 'p2';
+    state.lastMoverId = roomData.lastMoverId || null;
+    state.myLines = 0; state.oppLines = 0;
+
+    // Update HUD names
+    document.getElementById('hud-you-name').textContent = state.playerName;
+    document.getElementById('hud-opp-name').textContent = state.opponentName;
+
+    // Update wins scoreboard names + counts
+    document.getElementById('wins-you-name').textContent = state.playerName;
+    document.getElementById('wins-opp-name').textContent = state.opponentName;
+    updateWinsDisplay(roomData);
+
+    // Label the opponent's progress bar with their actual name
+    document.getElementById('bingo-bar-opp-label').textContent = state.opponentName + "'s Progress";
+
+    showScreen('game-screen');
+    renderBoards();
+    updateHUD();
+    startGameListener();
+    startTimer();
+  }
+
+  /* ================================================================
+     WINS SCOREBOARD
+  ================================================================ */
+  function updateWinsDisplay(d) {
+    if (!d) return;
+    const myW = state.playerId === 'p1' ? (d.p1Wins || 0) : (d.p2Wins || 0);
+    const oppW = state.playerId === 'p1' ? (d.p2Wins || 0) : (d.p1Wins || 0);
+    state.myWins = myW;
+    state.oppWins = oppW;
+    const youEl = document.getElementById('wins-you-num');
+    const oppEl = document.getElementById('wins-opp-num');
+    if (youEl) youEl.textContent = myW;
+    if (oppEl) oppEl.textContent = oppW;
+  }
+
+  /* ================================================================
+     RENDER BOARDS
+  ================================================================ */
+  function renderBoards() {
+    renderBoard('your-board', state.myBoard, true);
+    renderBoard('opp-board', state.opponentBoard, false);
+  }
+
+  function renderBoard(containerId, numbers, isYours) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    numbers.forEach((num, idx) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.num = num;
+      cell.dataset.idx = idx;
+      cell.textContent = num;
+
+      if (state.selectedNums.includes(num)) {
+        cell.classList.add('selected');
+      }
+
+      if (isYours) {
+        cell.addEventListener('click', () => handleCellClick(num));
+      } else {
+        cell.classList.add('disabled');
+      }
+
+      container.appendChild(cell);
+    });
+    highlightCompletedLines('your-board', state.myBoard);
+    highlightCompletedLines('opp-board', state.opponentBoard);
+  }
+
+  function updateAllCells(newSelected) {
+    state.selectedNums = newSelected;
+    ['your-board', 'opp-board'].forEach(boardId => {
+      document.querySelectorAll(`#${boardId} .cell`).forEach(cell => {
+        const n = parseInt(cell.dataset.num);
+        if (newSelected.includes(n)) {
+          cell.classList.add('selected');
+        }
+      });
+    });
+    highlightCompletedLines('your-board', state.myBoard);
+    highlightCompletedLines('opp-board', state.opponentBoard);
+    const myLines = countLines(state.myBoard, newSelected);
+    const oppLines = countLines(state.opponentBoard, newSelected);
+    state.myLines = myLines; state.oppLines = oppLines;
+    document.getElementById('your-lines').textContent = myLines;
+    document.getElementById('opp-lines').textContent = oppLines;
+    updateBingoBar('bingo-bar-you', myLines);
+    updateBingoBar('bingo-bar-opp', oppLines);
+  }
+
+  /* ================================================================
+     CELL CLICK
+  ================================================================ */
+  function handleCellClick(num) {
+    if (state.gameOver) return;
+    if (state.currentTurn !== state.playerId) {
+      setGameMsg('Not your turn!', 'error'); return;
+    }
+    if (state.selectedNums.includes(num)) {
+      setGameMsg('Already selected!', 'error'); return;
+    }
+    Sounds.select();
+    makeMove(num);
+  }
+
+  async function makeMove(num) {
+    if (state.gameOver) return;
+    const newSelected = [...state.selectedNums, num];
+    const nextTurn = state.currentTurn === 'p1' ? 'p2' : 'p1';
+
+    stopTimer();
+
+    try {
+      await updateDoc(doc(db, 'rooms', state.roomId), {
+        selectedNums: newSelected,
+        currentTurn: nextTurn,
+        lastMove: num,
+        lastMoverId: state.playerId,
+        timerReset: Date.now()
+      });
+    } catch(e) {
+      startTimer();
+    }
+  }
+
+  /* ================================================================
+     GAME LISTENER
+  ================================================================ */
+  function startGameListener() {
+    state.unsubRoom = onSnapshot(doc(db, 'rooms', state.roomId), snap => {
+      if (!snap.exists()) { handleRoomDeleted(); return; }
+      const d = snap.data();
+      if (!d) return;
+
+      // Keep wins scoreboard + last-mover info in sync on every update
+      updateWinsDisplay(d);
+      if (d.lastMoverId) state.lastMoverId = d.lastMoverId;
+
+      // ── Opponent left the room ──────────────────────────────
+      // Works both during game AND after game (e.g. opponent clicks Leave Room on winner screen)
+      if (d.leftBy && d.leftBy !== state.playerName) {
+        stopTimer(); cleanupListener(); stopConfetti();
+        if (!state.gameOver) state.gameOver = true;
+        document.getElementById('opp-left-name').textContent = d.leftBy + ' has left the game.';
+        ['winner-overlay','play-again-request-overlay','play-again-declined-overlay']
+          .forEach(id => document.getElementById(id).classList.remove('active'));
+        document.getElementById('opp-left-overlay').classList.add('active');
+        return;
+      }
+
+      // ── Play-again request received (shown ON TOP of winner overlay) ─
+      if (d.playAgainRequest && d.playAgainRequest !== state.playerId && !state.playAgainReceived) {
+        state.playAgainReceived = true;
+        document.getElementById('play-again-requester-name').textContent = state.opponentName;
+        document.getElementById('play-again-request-overlay').classList.add('active');
+      }
+
+      // ── Play-again DECLINED → BOTH players see declined popup ──
+      if (d.playAgainDeclined) {
+        // For the requester: hide winner overlay, show declined popup
+        if (state.playAgainSent) {
+          stopTimer(); cleanupListener();
+          document.getElementById('winner-overlay').classList.remove('active');
+          document.getElementById('waiting-rematch').style.display = 'none';
+          document.getElementById('winner-actions').style.display = 'block';
+          document.getElementById('declined-msg').textContent = 'Your opponent declined the rematch. Returning to lobby…';
+          document.getElementById('play-again-declined-overlay').classList.add('active');
+        }
+        // For the decliner: already shown inline in declinePlayAgain()
+        return;
+      }
+
+      // ── Play-again ACCEPTED → requester goes to setup ──────────
+      if (d.playAgainAccepted && state.playAgainSent) {
+        state.gameStarted = false; state.gameOver = false;
+        state.myBoard = []; state.opponentBoard = [];
+        state.selectedNums = []; state.myLines = 0; state.oppLines = 0;
+        state.currentTurn = 'p2'; state.lastMoverId = null;
+        state.playAgainSent = false; state.playAgainReceived = false;
+        cleanupListener(); stopConfetti();
+        document.getElementById('winner-overlay').classList.remove('active');
+        goToSetup();
+        return;
+      }
+
+      // ── Normal game flow ────────────────────────────────────
+      const prevTurn = state.currentTurn;
+      state.currentTurn = d.currentTurn || 'p2';
+
+      updateAllCells(d.selectedNums || []);
+
+      if (d.winner && !state.gameOver) {
+        state.gameOver = true;
+        stopTimer();
+        showWinner(d.winner);
+        // Only the winning player's own client records the win, avoiding double counting
+        if (d.winner === state.playerName) {
+          const winField = state.playerId === 'p1' ? { p1Wins: increment(1) } : { p2Wins: increment(1) };
+          updateDoc(doc(db, 'rooms', state.roomId), winField).catch(() => {});
+        }
+        return;
+      }
+
+      if (prevTurn !== state.currentTurn) {
+        Sounds.turnChange();
+        startTimer();
+      }
+
+      updateHUD();
+      checkWinCondition();
+    });
+  }
+
+  /* ================================================================
+     WIN CONDITION
+  ================================================================ */
+  async function checkWinCondition() {
+    if (state.gameOver) return;
+    const myLines = countLines(state.myBoard, state.selectedNums);
+    const oppLines = countLines(state.opponentBoard, state.selectedNums);
+
+    if (myLines >= 5 && oppLines >= 5) {
+      // Both boards completed at the same time — the player whose move just
+      // completed the pattern (i.e. whose turn it was) wins, the other loses.
+      const winnerName = state.lastMoverId === state.playerId ? state.playerName : state.opponentName;
+      await updateDoc(doc(db, 'rooms', state.roomId), { winner: winnerName, gameOver: true });
+    } else if (myLines >= 5) {
+        await updateDoc(doc(db, 'rooms', state.roomId), { winner: state.playerName, gameOver: true });
+    } else if (oppLines >= 5) {
+        await updateDoc(doc(db, 'rooms', state.roomId), { winner: state.opponentName, gameOver: true });
+    }
+  }
+
+  /* ================================================================
+     LINE DETECTION
+  ================================================================ */
+  function countLines(board, selected) {
+    let count = 0;
+    const grid = Array.from({ length: 5 }, (_, r) =>
+      Array.from({ length: 5 }, (_, c) => board[r * 5 + c])
+    );
+    const sel = new Set(selected);
+
+    // Rows
+    for (let r = 0; r < 5; r++) {
+      if (grid[r].every(n => sel.has(n))) count++;
+    }
+    // Cols
+    for (let c = 0; c < 5; c++) {
+      if ([0,1,2,3,4].every(r => sel.has(grid[r][c]))) count++;
+    }
+    // Diagonals
+    if ([0,1,2,3,4].every(i => sel.has(grid[i][i]))) count++;
+    if ([0,1,2,3,4].every(i => sel.has(grid[i][4-i]))) count++;
+
+    return count;
+  }
+
+  function getCompletedLineIndices(board, selected) {
+    const indices = new Set();
+    const grid = Array.from({ length: 5 }, (_, r) =>
+      Array.from({ length: 5 }, (_, c) => board[r * 5 + c])
+    );
+    const sel = new Set(selected);
+
+    for (let r = 0; r < 5; r++) {
+      if (grid[r].every(n => sel.has(n))) {
+        for (let c = 0; c < 5; c++) indices.add(r * 5 + c);
+      }
+    }
+    for (let c = 0; c < 5; c++) {
+      if ([0,1,2,3,4].every(r => sel.has(grid[r][c]))) {
+        for (let r = 0; r < 5; r++) indices.add(r * 5 + c);
+      }
+    }
+    if ([0,1,2,3,4].every(i => sel.has(grid[i][i]))) {
+      for (let i = 0; i < 5; i++) indices.add(i * 5 + i);
+    }
+    if ([0,1,2,3,4].every(i => sel.has(grid[i][4-i]))) {
+      for (let i = 0; i < 5; i++) indices.add(i * 5 + (4 - i));
+    }
+    return indices;
+  }
+
+  function highlightCompletedLines(boardId, board) {
+    const lineIdxs = getCompletedLineIndices(board, state.selectedNums);
+    const cells = document.querySelectorAll(`#${boardId} .cell`);
+    cells.forEach((cell, idx) => {
+      if (lineIdxs.has(idx)) cell.classList.add('line-complete');
+      else cell.classList.remove('line-complete');
+    });
+  }
+
+  /* ================================================================
+     BINGO BAR
+  ================================================================ */
+  function updateBingoBar(barId, lines) {
+    const bar = document.getElementById(barId);
+    const letters = bar.querySelectorAll('.bingo-letter');
+    letters.forEach((el, i) => {
+      if (i < lines) {
+        if (!el.classList.contains('lit')) {
+          el.classList.add('lit');
+          if (lines > 0) Sounds.lineComplete();
+        }
+      } else {
+        el.classList.remove('lit');
+      }
+    });
+  }
+
+  /* ================================================================
+     HUD UPDATE
+  ================================================================ */
+  function updateHUD() {
+    const isMyTurn = state.currentTurn === state.playerId;
+    const ind = document.getElementById('turn-indicator');
+    ind.textContent = isMyTurn ? '⚡ Your Turn' : '⏳ Opponent Turn';
+    ind.className = 'turn-indicator ' + (isMyTurn ? 'your-turn' : 'opp-turn');
+    if (isMyTurn) setGameMsg('Pick a number on your board!', 'info');
+    else setGameMsg(`Waiting for ${state.opponentName}…`, '');
+  }
+
+  /* ================================================================
+     TIMER
+  ================================================================ */
+  function startTimer() {
+    stopTimer();
+    state.timerSeconds = 30;
+    updateTimerDisplay();
+    state.timerInterval = setInterval(() => {
+      state.timerSeconds--;
+      updateTimerDisplay();
+      if (state.timerSeconds <= 0) {
+        stopTimer();
+        if (state.currentTurn === state.playerId) {
+          autoSelectRandom();
+        }
+      }
+    }, 1000);
+  }
+
+  function stopTimer() {
+    if (state.timerInterval) { clearInterval(state.timerInterval); state.timerInterval = null; }
+  }
+
+  function updateTimerDisplay() {
+    const el = document.getElementById('timer-num');
+    el.textContent = state.timerSeconds;
+    el.className = 'timer-num' + (state.timerSeconds <= 5 ? ' danger' : '');
+  }
+
+  async function autoSelectRandom() {
+    const unselected = state.myBoard.filter(n => !state.selectedNums.includes(n));
+    if (!unselected.length) return;
+    const n = unselected[Math.floor(Math.random() * unselected.length)];
+    setGameMsg('⏰ Time up! Auto-selecting…', 'info');
+    await makeMove(n);
+  }
+
+  /* ================================================================
+     WINNER  — shown to BOTH players with Play Again + Leave buttons
+  ================================================================ */
+  function showWinner(winnerName) {
+    const isMe = winnerName === state.playerName;
+    document.getElementById('popup-title').textContent = isMe ? '🥇 You Win!' : '💔 You Lose';
+    document.getElementById('WinnerIcon').textContent = isMe ? '🏆' : '😢';
+    document.getElementById('popup-winner-name').textContent = isMe ? 'Congratulations!' : 'Better luck next time!';
+    // Make sure the normal action buttons are visible, hide waiting state
+    document.getElementById('winner-actions').style.display = 'block';
+    document.getElementById('waiting-rematch').style.display = 'none';
+    document.getElementById('play-again-btn').textContent = '🔄 Play Again';
+    document.getElementById('play-again-btn').disabled = false;
+    document.getElementById('winner-overlay').classList.add('active');
+    Sounds.winner();
+    if (isMe) startConfetti();
+  }
+
+  /* ================================================================
+     PLAY AGAIN — switches winner popup to "waiting" state
+  ================================================================ */
+  window.playAgain = async function() {
+    Sounds.click();
+    if (!state.roomId) return;
+    state.playAgainSent = true;
+
+    // Switch the winner popup to waiting mode (keep overlay open)
+    document.getElementById('winner-actions').style.display = 'none';
+    document.getElementById('waiting-rematch').style.display = 'block';
+
+    try {
+      await updateDoc(doc(db, 'rooms', state.roomId), {
+        playAgainRequest: state.playerId,
+        playAgainDeclined: false,
+        playAgainAccepted: false
+      });
+    } catch(e) {
+      // On error revert
+      document.getElementById('winner-actions').style.display = 'block';
+      document.getElementById('waiting-rematch').style.display = 'none';
+      state.playAgainSent = false;
+    }
+  };
+
+  /* ================================================================
+     ACCEPT PLAY AGAIN
+  ================================================================ */
+  window.acceptPlayAgain = async function() {
+    Sounds.click();
+    document.getElementById('play-again-request-overlay').classList.remove('active');
+    state.playAgainReceived = false;
+
+    try {
+      await updateDoc(doc(db, 'rooms', state.roomId), {
+        p1Ready: false, p2Ready: false,
+        p1Board: [], p2Board: [],
+        selectedNums: [], currentTurn: 'p2', lastMoverId: '',
+        winner: '', gameOver: false,
+        lastMove: null, leftBy: '',
+        playAgainRequest: '', playAgainDeclined: false,
+        playAgainAccepted: true
+      });
+    } catch(e) {}
+
+    // Go to setup (requester also transitions via the listener below)
+    state.gameStarted = false; state.gameOver = false;
+    state.myBoard = []; state.opponentBoard = [];
+    state.selectedNums = []; state.myLines = 0; state.oppLines = 0;
+    state.currentTurn = 'p2'; state.lastMoverId = null;
+    state.playAgainSent = false; state.playAgainReceived = false;
+    cleanupListener(); stopConfetti();
+    document.getElementById('winner-overlay').classList.remove('active');
+    goToSetup();
+  };
+
+  /* ================================================================
+     DECLINE PLAY AGAIN — signals Firebase so BOTH players see it
+  ================================================================ */
+  window.declinePlayAgain = async function() {
+    Sounds.click();
+    document.getElementById('play-again-request-overlay').classList.remove('active');
+    try {
+      await updateDoc(doc(db, 'rooms', state.roomId), {
+        playAgainDeclined: true,
+        playAgainRequest: ''
+      });
+    } catch(e) {}
+    // Show declined popup to THIS player immediately
+    document.getElementById('declined-msg').textContent = 'You declined the rematch. Returning to lobby…';
+    document.getElementById('play-again-declined-overlay').classList.add('active');
+    // The requester sees it via the listener (startGameListener handles playAgainDeclined)
+  };
+
+  /* ================================================================
+     LEAVE ROOM
+  ================================================================ */
+  /* Internal reset & redirect — used after showing popups */
+  function resetAndGoLobby() {
+    stopConfetti(); stopTimer(); cleanupListener();
+    // Close all overlays
+    ['winner-overlay','opp-left-overlay','play-again-request-overlay','play-again-declined-overlay']
+      .forEach(id => document.getElementById(id).classList.remove('active'));
+    state = {
+      roomId: null, playerId: null, playerName: '', opponentName: '',
+      myBoard: [], opponentBoard: [], selectedNums: [],
+      myLines: 0, oppLines: 0, currentTurn: 'p2', lastMoverId: null,
+      myWins: 0, oppWins: 0,
+      gameStarted: false, gameOver: false,
+      timerInterval: null, timerSeconds: 30, unsubRoom: null,
+      playAgainSent: false, playAgainReceived: false
+    };
+    document.getElementById('create-room-info').style.display = 'none';
+    document.querySelector('#create-screen .btn-primary').style.display = 'block';
+    document.querySelector('#create-screen .btn-outline').style.display = 'block';
+    document.querySelector('#create-screen .input-wrap').style.display = 'block';
+    document.getElementById('create-name').value = '';
+    document.getElementById('join-name').value = '';
+    document.getElementById('join-code').value = '';
+    document.getElementById('join-error').textContent = '';
+    showScreen('landing-screen');
+  }
+
+  window.leaveRoom = async function() {
+    Sounds.click();
+    const roomId = state.roomId;
+    const playerName = state.playerName;
+    // Notify opponent that this player left
+    if (roomId) {
+      try {
+        await updateDoc(doc(db, 'rooms', roomId), {
+          leftBy: playerName,
+          leftAt: Date.now()
+        });
+      } catch(e) {}
+    }
+    resetAndGoLobby();
+  };
+
+  /* Called from "Leave Room" btn inside the opp-left popup */
+  window.doLeaveAfterOppLeft = function() {
+    Sounds.click();
+    resetAndGoLobby();
+  };
+
+  /* Called from "Leave Room" btn inside the declined popup */
+  window.doLeaveAfterDecline = function() {
+    Sounds.click();
+    resetAndGoLobby();
+  };
+
+  function handleRoomDeleted() {
+    stopTimer(); cleanupListener();
+    resetAndGoLobby();
+  }
+
+  /* ================================================================
+     UTILITIES
+  ================================================================ */
+  function generateCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
+  window.copyRoomCode = function() {
+    Sounds.click();
+    navigator.clipboard.writeText(state.roomId).then(() => {
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => { btn.textContent = '📋 Copy Room Code'; }, 2000);
+    });
+  };
+
+  function setGameMsg(msg, type) {
+    const el = document.getElementById('game-msg');
+    el.textContent = msg;
+    el.className = 'msg-bar ' + type;
+  }
+
+  function cleanupListener() {
+    if (state.unsubRoom) { state.unsubRoom(); state.unsubRoom = null; }
+  }
+
+  /* ================================================================
+     CONFETTI
+  ================================================================ */
+  let confettiAnimId = null;
+  const confettiPieces = [];
+  const confettiColors = ['#4fc3f7','#ce93d8','#69f0ae','#f48fb1','#ffd700','#ff7043'];
+
+  function startConfetti() {
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    confettiPieces.length = 0;
+
+    for (let i = 0; i < 140; i++) {
+      confettiPieces.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height - canvas.height,
+        w: 8 + Math.random() * 8,
+        h: 6 + Math.random() * 6,
+        color: confettiColors[Math.floor(Math.random() * confettiColors.length)],
+        vy: 2 + Math.random() * 3,
+        vx: (Math.random() - 0.5) * 2,
+        rot: Math.random() * Math.PI * 2,
+        rspd: (Math.random() - 0.5) * 0.15
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      confettiPieces.forEach(p => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+        ctx.restore();
+        p.y += p.vy; p.x += p.vx; p.rot += p.rspd;
+        if (p.y > canvas.height) { p.y = -10; p.x = Math.random() * canvas.width; }
+      });
+      confettiAnimId = requestAnimationFrame(draw);
+    }
+    draw();
+  }
+
+  function stopConfetti() {
+    if (confettiAnimId) { cancelAnimationFrame(confettiAnimId); confettiAnimId = null; }
+    const canvas = document.getElementById('confetti-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  /* ================================================================
+     JOIN CODE INPUT – uppercase transform
+  ================================================================ */
+  document.getElementById('join-code').addEventListener('input', function() {
+    this.value = this.value.toUpperCase();
+  });
+
+</script>
+
+</body>
+</html>
