@@ -816,29 +816,6 @@
         </div>
     </div>
 </div>
-    
-    <!--<div style="margin-bottom:12px; display: flex; justify-content: space-between;" id="bingo-bars-wrap">
-      <div style="text-align:center;">
-        <div class="board-label you" style="margin-bottom:6px">Your Progress</div>
-        <div class="bingo-bar" id="bingo-bar-you">
-          <div class="bingo-letter" data-l="B">B</div>
-          <div class="bingo-letter" data-l="I">I</div>
-          <div class="bingo-letter" data-l="N">N</div>
-          <div class="bingo-letter" data-l="G">G</div>
-          <div class="bingo-letter" data-l="O">O</div>
-        </div>
-      </div>
-      <div style="text-align:center;margin-top:10px;">
-        <div class="board-label opponent" style="margin-bottom:6px" id="bingo-bar-opp-label">Opponent Progress</div>
-        <div class="bingo-bar" id="bingo-bar-opp">
-          <div class="bingo-letter" data-l="B">B</div>
-          <div class="bingo-letter" data-l="I">I</div>
-          <div class="bingo-letter" data-l="N">N</div>
-          <div class="bingo-letter" data-l="G">G</div>
-          <div class="bingo-letter" data-l="O">O</div>
-        </div>
-      </div>
-    </div>-->
 
     <!-- Boards — player sees only their own board -->
     <div style="display:flex;justify-content:center;">
@@ -1060,6 +1037,7 @@
         p1Wins: 0,
         p2Wins: 0,
         winner: '',
+        winnerId: '',
         gameOver: false,
         leftBy: '',
         leftAt: null,
@@ -1121,14 +1099,6 @@
       errEl.textContent = 'Error: ' + e.message;
     }
   };
-
-  /* ================================================================
-     SETUP SCREEN
-  ================================================================ */
-  // function goToSetup() {
-  //   showScreen('setup-screen');
-  //   buildSetupGrid();
-  // }
 
   /* ================================================================
      SETUP SCREEN
@@ -1289,36 +1259,6 @@
 
   /* ================================================================
      READY
-  ================================================================ */
-  // window.submitReady = async function() {
-  //   Sounds.click();
-  //   const vals = getSetupValues();
-  //   const nums = vals.map(v => parseInt(v));
-  //   state.myBoard = nums;
-
-  //   // Lock inputs
-  //   document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = true);
-  //   document.getElementById('ready-btn').style.display = 'none';
-  //   document.getElementById('random-fill-btn').style.display = 'none';
-  //   document.getElementById('waiting-ready-msg').style.display = 'block';
-
-  //   const field = state.playerId === 'p1' ? { p1Board: nums, p1Ready: true } : { p2Board: nums, p2Ready: true };
-  //   await updateDoc(doc(db, 'rooms', state.roomId), field);
-
-  //   // Listen for both ready
-  //   state.unsubRoom = onSnapshot(doc(db, 'rooms', state.roomId), snap => {
-  //     if (!snap.exists()) return;
-  //     const d = snap.data();
-  //     if (d.p1Ready && d.p2Ready && !state.gameStarted) {
-  //       state.opponentBoard = state.playerId === 'p1' ? d.p2Board : d.p1Board;
-  //       if (!state.opponentBoard || state.opponentBoard.length < 25) return;
-  //       cleanupListener();
-  //       startGame(d);
-  //     }
-  //   });
-  // };
-  /* ================================================================
-     READY
   =============================================================== */
   window.submitReady = async function() {
     Sounds.click();
@@ -1330,7 +1270,7 @@
     document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = true);
     document.getElementById('ready-btn').style.display = 'none';
     document.getElementById('random-fill-btn').style.display = 'none';
-    
+
     // Set default waiting text before database updates it
     const waitingTextElement = document.querySelector('#waiting-ready-msg .waiting-text');
     waitingTextElement.textContent = `Board locked. Waiting for ${state.opponentName} to be ready…`;
@@ -1338,7 +1278,7 @@
 
     const field = state.playerId === 'p1' ? { p1Ready: true } : { p2Ready: true };
     const boardField = state.playerId === 'p1' ? { p1Board: nums } : { p2Board: nums };
-    
+
     // Update Firebase (The listener in goToSetup will handle the transition automatically)
     await updateDoc(doc(db, 'rooms', state.roomId), { ...field, ...boardField });
   };
@@ -1546,9 +1486,10 @@
       if (d.winner && !state.gameOver) {
         state.gameOver = true;
         stopTimer();
-        showWinner(d.winner);
+        const iWon = d.winnerId === state.playerId;
+        showWinner(d.winner, iWon);
         // Only the winning player's own client records the win, avoiding double counting
-        if (d.winner === state.playerName) {
+        if (iWon) {
           const winField = state.playerId === 'p1' ? { p1Wins: increment(1) } : { p2Wins: increment(1) };
           updateDoc(doc(db, 'rooms', state.roomId), winField).catch(() => {});
         }
@@ -1573,15 +1514,22 @@
     const myLines = countLines(state.myBoard, state.selectedNums);
     const oppLines = countLines(state.opponentBoard, state.selectedNums);
 
+    // Determine the winner by PLAYER ID ('p1'/'p2'), never by name —
+    // names can collide between the two players, IDs never do.
+    let winnerId = null;
     if (myLines >= 5 && oppLines >= 5) {
       // Both boards completed at the same time — the player whose move just
       // completed the pattern (i.e. whose turn it was) wins, the other loses.
-      const winnerName = state.lastMoverId === state.playerId ? state.playerName : state.opponentName;
-      await updateDoc(doc(db, 'rooms', state.roomId), { winner: winnerName, gameOver: true });
+      winnerId = state.lastMoverId;
     } else if (myLines >= 5) {
-        await updateDoc(doc(db, 'rooms', state.roomId), { winner: state.playerName, gameOver: true });
+      winnerId = state.playerId;
     } else if (oppLines >= 5) {
-        await updateDoc(doc(db, 'rooms', state.roomId), { winner: state.opponentName, gameOver: true });
+      winnerId = state.playerId === 'p1' ? 'p2' : 'p1';
+    }
+
+    if (winnerId) {
+      const winnerName = winnerId === state.playerId ? state.playerName : state.opponentName;
+      await updateDoc(doc(db, 'rooms', state.roomId), { winner: winnerName, winnerId, gameOver: true });
     }
   }
 
@@ -1715,8 +1663,7 @@
   /* ================================================================
      WINNER  — shown to BOTH players with Play Again + Leave buttons
   ================================================================ */
-  function showWinner(winnerName) {
-    const isMe = winnerName === state.playerName;
+  function showWinner(winnerName, isMe) {
     document.getElementById('popup-title').textContent = isMe ? '🥇 You Win!' : '💔 You Lose';
     document.getElementById('WinnerIcon').textContent = isMe ? '🏆' : '😢';
     document.getElementById('popup-winner-name').textContent = isMe ? 'Congratulations!' : 'Better luck next time!';
@@ -1769,7 +1716,7 @@
         p1Ready: false, p2Ready: false,
         p1Board: [], p2Board: [],
         selectedNums: [], currentTurn: 'p2', lastMoverId: '',
-        winner: '', gameOver: false,
+        winner: '', winnerId: '', gameOver: false,
         lastMove: null, leftBy: '',
         playAgainRequest: '', playAgainDeclined: false,
         playAgainAccepted: true
