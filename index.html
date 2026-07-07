@@ -177,6 +177,8 @@
   .btn-outline:hover { background: var(--glass); border-color: var(--neon-blue); }
 
   .btn + .btn { margin-top: 12px; }
+  .difficulty-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; line-height: 1.3; }
+  .difficulty-sub { font-size: 0.72rem; font-weight: 400; opacity: 0.85; letter-spacing: 0.2px; }
   .btn:disabled { opacity: 0.42; cursor: not-allowed; transform: none !important; }
 
   /* ============================================================
@@ -671,6 +673,33 @@
       <div class="tagline">1 On 1 · Real-time</div>
       <button class="btn btn-primary" onclick="startCreateRoom()">🎯 Create Room</button>
       <button class="btn btn-secondary" onclick="startJoinRoom()">🚪 Join Room</button>
+      <button class="btn btn-outline" onclick="startAIMode()">🤖 VS Computer</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       AI DIFFICULTY SCREEN
+  ============================================================ -->
+  <div id="ai-difficulty-screen" class="screen">
+    <div class="glass-card">
+      <h2>Choose Difficulty</h2>
+      <p class="text-dim text-center" style="margin-bottom: 15px;">Pick how smart the Computer should be</p>
+
+      <button class="btn btn-secondary difficulty-btn" onclick="selectAIDifficulty('easy')">
+        🙂 Easy
+        <span class="difficulty-sub">AI can't see your board · 30s timer</span>
+      </button>
+      <button class="btn btn-primary difficulty-btn" onclick="selectAIDifficulty('hard')">
+        😤 Hard
+        <span class="difficulty-sub">AI can't see your board · plays sharp · 30s timer</span>
+      </button>
+      <button class="btn btn-danger difficulty-btn" onclick="selectAIDifficulty('impossible')">
+        💀 Next to Impossible
+        <span class="difficulty-sub">AI reads both boards · you see its board too · no timer</span>
+      </button>
+
+      <div class="spacer"></div>
+      <button class="btn btn-outline" onclick="showScreen('landing-screen')">← Back</button>
     </div>
   </div>
 
@@ -817,13 +846,16 @@
     </div>
 </div>
 
-    <!-- Boards — player sees only their own board -->
-    <div style="display:flex;justify-content:center;">
+    <!-- Boards — hidden opponent board by default (easy/hard), revealed
+         for "Next to Impossible" since the AI reads both boards there -->
+    <div id="boards-wrap" style="display:flex;justify-content:center;gap:18px;flex-wrap:wrap;">
       <div class="board-section">
         <div class="board-label you" style="text-align:center;margin-bottom:10px;">Your Board</div>
         <div class="bingo-grid" id="your-board"></div>
-        <!-- opp-board hidden: still rendered for line counting but invisible -->
-        <div id="opp-board" style="display:none;"></div>
+      </div>
+      <div class="board-section" id="opp-board-section" style="display:none;">
+        <div class="board-label opponent" style="text-align:center;margin-bottom:10px;" id="opp-board-label">Computer's Board</div>
+        <div class="bingo-grid" id="opp-board"></div>
       </div>
     </div>
 
@@ -907,6 +939,28 @@
     onSnapshot, deleteDoc, serverTimestamp, increment
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "F12") {
+        e.preventDefault();
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (
+        (e.ctrlKey && e.shiftKey &&
+            (e.key === "I" || e.key === "J" || e.key === "C")) ||
+        (e.ctrlKey && e.key === "U")
+    ) {
+        e.preventDefault();
+    }
+  });
+
+
+  document.addEventListener("contextmenu", function (e) {
+    e.preventDefault();
+  });
+
   /* ================================================================
      🔥 FIREBASE CONFIG — Replace with your own project credentials
   ================================================================ */
@@ -989,6 +1043,9 @@
     unsubRoom: null,
     playAgainSent: false,       // did I send play-again request?
     playAgainReceived: false,   // did I receive play-again request?
+    vsAI: false,                // true when playing local VS Computer mode
+    aiThinking: false,
+    aiDifficulty: 'hard',       // 'easy' | 'hard' | 'impossible'
   };
 
   /* ================================================================
@@ -1011,6 +1068,39 @@
     Sounds.click();
     showScreen('join-screen');
   };
+
+  /* ================================================================
+     VS COMPUTER — local, no Firebase
+  ================================================================ */
+  window.startAIMode = function() {
+    Sounds.click();
+    showScreen('ai-difficulty-screen');
+  };
+
+  window.selectAIDifficulty = function(level) {
+    Sounds.click();
+    state.aiDifficulty = level;
+    state.vsAI = true;
+    state.playerId = 'p1';
+    state.playerName = 'You';
+    state.opponentName = 'Computer 🤖';
+    state.roomId = null;
+    showScreen('setup-screen');
+    buildSetupGrid();
+    document.getElementById('ready-btn').style.display = 'block';
+    document.getElementById('random-fill-btn').style.display = 'block';
+    document.getElementById('waiting-ready-msg').style.display = 'none';
+    document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = false);
+  };
+
+  function shuffledBoard() {
+    const nums = Array.from({ length: 25 }, (_, i) => i + 1);
+    for (let i = nums.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [nums[i], nums[j]] = [nums[j], nums[i]];
+    }
+    return nums;
+  }
 
   /* ================================================================
      CREATE ROOM
@@ -1271,6 +1361,14 @@
     document.getElementById('ready-btn').style.display = 'none';
     document.getElementById('random-fill-btn').style.display = 'none';
 
+    // VS Computer: skip Firebase entirely, set up local game
+    if (state.vsAI) {
+      state.opponentBoard = shuffledBoard();
+      buildAIEngine();
+      startGameLocal();
+      return;
+    }
+
     // Set default waiting text before database updates it
     const waitingTextElement = document.querySelector('#waiting-ready-msg .waiting-text');
     waitingTextElement.textContent = `Board locked. Waiting for ${state.opponentName} to be ready…`;
@@ -1304,12 +1402,62 @@
 
     // Label the opponent's progress bar with their actual name
     document.getElementById('bingo-bar-opp-label').textContent = state.opponentName + "'s Progress";
+    resetBingoBars();
 
     showScreen('game-screen');
     renderBoards();
     updateHUD();
     startGameListener();
     startTimer();
+  }
+
+  /* ================================================================
+     GAME START — VS COMPUTER (local, no Firebase)
+  ================================================================ */
+  function startGameLocal() {
+    state.gameStarted = true;
+    state.selectedNums = [];
+    state.currentTurn = Math.random() < 0.5 ? 'p1' : 'p2';
+    state.lastMoverId = null;
+    state.myLines = 0; state.oppLines = 0;
+    state.myWins = state.myWins || 0;
+    state.oppWins = state.oppWins || 0;
+
+    document.getElementById('hud-you-name').textContent = state.playerName;
+    document.getElementById('hud-opp-name').textContent = state.opponentName;
+    document.getElementById('wins-you-name').textContent = state.playerName;
+    document.getElementById('wins-opp-name').textContent = state.opponentName;
+    document.getElementById('wins-you-num').textContent = state.myWins;
+    document.getElementById('wins-opp-num').textContent = state.oppWins;
+    document.getElementById('bingo-bar-opp-label').textContent = state.opponentName + "'s Progress";
+    resetBingoBars();
+
+    const isImpossible = state.aiDifficulty === 'impossible';
+
+    // Next to Impossible: the AI reads both boards to plan its moves, so in
+    // fairness the player gets to see the Computer's board too, and since
+    // there's no shared network clock to race, there's no timer either.
+    // Easy / Hard: the AI never looks at your board, so your board stays
+    // private the same way it would be against a human — and a 30s clock
+    // keeps the pressure on, same as regular multiplayer.
+    const timerEl = document.querySelector('.timer-wrap');
+    if (timerEl) timerEl.style.display = isImpossible ? 'none' : '';
+
+    const oppBoardSection = document.getElementById('opp-board-section');
+    if (oppBoardSection) oppBoardSection.style.display = isImpossible ? '' : 'none';
+
+    showScreen('game-screen');
+    renderBoards();
+    updateHUD();
+
+    if (!isImpossible && state.currentTurn === state.playerId) {
+      startTimer();
+    }
+
+    if (state.currentTurn !== state.playerId) {
+      setGameMsg(`${state.opponentName} is thinking…`, 'info');
+      setTimeout(triggerAIMove, 700);
+    }
   }
 
   /* ================================================================
@@ -1394,7 +1542,8 @@
       setGameMsg('Already selected!', 'error'); return;
     }
     Sounds.select();
-    makeMove(num);
+    if (state.vsAI) makeMoveLocal(num, state.playerId);
+    else makeMove(num);
   }
 
   async function makeMove(num) {
@@ -1414,6 +1563,51 @@
       });
     } catch(e) {
       startTimer();
+    }
+  }
+
+  /* ================================================================
+     MOVE HANDLING — VS COMPUTER (local, synchronous, no Firebase)
+  ================================================================ */
+  function makeMoveLocal(num, moverId) {
+    if (state.gameOver) return;
+    stopTimer();
+    state.selectedNums = [...state.selectedNums, num];
+    state.lastMoverId = moverId;
+    state.currentTurn = moverId === 'p1' ? 'p2' : 'p1';
+
+    updateAllCells(state.selectedNums);
+    Sounds.turnChange();
+
+    const myLines = countLines(state.myBoard, state.selectedNums);
+    const oppLines = countLines(state.opponentBoard, state.selectedNums);
+
+    if (myLines >= 5 || oppLines >= 5) {
+      // Winner decided by PLAYER ID (never by name) — same rule as multiplayer:
+      // if both complete simultaneously, whoever's move just triggered it wins.
+      const winnerId = (myLines >= 5 && oppLines >= 5)
+        ? state.lastMoverId
+        : (myLines >= 5 ? state.playerId : (state.playerId === 'p1' ? 'p2' : 'p1'));
+
+      state.gameOver = true;
+      const iWon = winnerId === state.playerId;
+      if (iWon) state.myWins++; else state.oppWins++;
+      document.getElementById('wins-you-num').textContent = state.myWins;
+      document.getElementById('wins-opp-num').textContent = state.oppWins;
+
+      showWinner(iWon ? state.playerName : state.opponentName, iWon);
+      return;
+    }
+
+    updateHUD();
+    // Easy / Hard run a per-turn 30s clock for the human player only;
+    // Next to Impossible has no timer at all.
+    if (state.aiDifficulty !== 'impossible' && state.currentTurn === state.playerId) {
+      startTimer();
+    }
+    if (state.currentTurn !== state.playerId) {
+      setGameMsg(`${state.opponentName} is thinking…`, 'info');
+      setTimeout(triggerAIMove, 600 + Math.random() * 500);
     }
   }
 
@@ -1534,6 +1728,192 @@
   }
 
   /* ================================================================
+     AI ENGINE — minimax with alpha-beta pruning over the real board
+     state. It only ever looks at the two boards + numbers already
+     called (exactly what a human player can also see), and it always
+     picks from the game's actual legal moves — no hidden peeking at
+     your pending click, no rigged RNG, no shortcutting the rules.
+     Near the end of the game it searches the full remaining tree, so
+     the endgame is played perfectly.
+  ================================================================ */
+  const AI_LINES = (() => {
+    const lines = [];
+    for (let r = 0; r < 5; r++) lines.push([r*5, r*5+1, r*5+2, r*5+3, r*5+4]);
+    for (let c = 0; c < 5; c++) lines.push([c, c+5, c+10, c+15, c+20]);
+    lines.push([0,6,12,18,24]);
+    lines.push([4,8,12,16,20]);
+    return lines;
+  })();
+
+  let aiLineMasks = [], humanLineMasks = [];
+
+  function buildLineMasks(board) {
+    return AI_LINES.map(line => {
+      let mask = 0;
+      for (const idx of line) mask |= (1 << (board[idx] - 1));
+      return mask;
+    });
+  }
+
+  function buildAIEngine() {
+    aiLineMasks = buildLineMasks(state.opponentBoard); // AI's own board
+    humanLineMasks = buildLineMasks(state.myBoard);      // human's board
+  }
+
+  function popcount(x) {
+    x = x - ((x >> 1) & 0x55555555);
+    x = (x & 0x33333333) + ((x >> 2) & 0x33333333);
+    return (((x + (x >> 4)) & 0x0F0F0F0F) * 0x01010101) >> 24;
+  }
+
+  const LINE_WEIGHT = [0, 1, 3, 9, 45];
+
+  function evaluateMask(mask) {
+    let score = 0;
+    for (const m of aiLineMasks) {
+      const b = popcount(mask & m);
+      score += b === 5 ? 2000 : LINE_WEIGHT[b];
+    }
+    for (const m of humanLineMasks) {
+      const b = popcount(mask & m);
+      score -= b === 5 ? 2000 : LINE_WEIGHT[b];
+    }
+    return score;
+  }
+
+  function linesComplete(lineMasks, mask) {
+    let c = 0;
+    for (const m of lineMasks) if ((mask & m) === m) c++;
+    return c;
+  }
+
+  function remainingNumbers(mask) {
+    const out = [];
+    for (let n = 1; n <= 25; n++) if (!(mask & (1 << (n - 1)))) out.push(n);
+    return out;
+  }
+
+  function search(mask, mover, depth, alpha, beta) {
+    const candidates = remainingNumbers(mask)
+      .map(n => ({ n, mask: mask | (1 << (n - 1)) }))
+      .sort((a, b) => mover === 'ai'
+        ? evaluateMask(b.mask) - evaluateMask(a.mask)
+        : evaluateMask(a.mask) - evaluateMask(b.mask));
+
+    const branchLimit = depth >= 5 ? 6 : (depth >= 3 ? 8 : candidates.length);
+    const limited = candidates.slice(0, Math.min(branchLimit, candidates.length));
+
+    let best = mover === 'ai' ? -Infinity : Infinity;
+    for (const { mask: newMask } of limited) {
+      const aiLines = linesComplete(aiLineMasks, newMask);
+      const humLines = linesComplete(humanLineMasks, newMask);
+      let val;
+      if (aiLines >= 5 || humLines >= 5) {
+        const winnerIsAI = (aiLines >= 5 && humLines >= 5) ? mover === 'ai' : aiLines >= 5;
+        val = winnerIsAI ? (100000 + depth) : -(100000 + depth);
+      } else if (depth <= 1) {
+        val = evaluateMask(newMask);
+      } else {
+        val = search(newMask, mover === 'ai' ? 'human' : 'ai', depth - 1, alpha, beta);
+      }
+      if (mover === 'ai') { if (val > best) best = val; alpha = Math.max(alpha, val); }
+      else { if (val < best) best = val; beta = Math.min(beta, val); }
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+
+  function aiChooseMove() {
+    const mask = state.selectedNums.reduce((m, n) => m | (1 << (n - 1)), 0);
+    const remaining = remainingNumbers(mask);
+    const depth = Math.min(remaining.length, remaining.length <= 10 ? remaining.length : 6);
+
+    let bestScore = -Infinity, bestMoves = [];
+    for (const n of remaining) {
+      const newMask = mask | (1 << (n - 1));
+      const aiLines = linesComplete(aiLineMasks, newMask);
+      const humLines = linesComplete(humanLineMasks, newMask);
+      let val;
+      if (aiLines >= 5 || humLines >= 5) {
+        val = aiLines >= 5 ? 999999 : -999999;
+      } else {
+        val = search(newMask, 'human', depth - 1, -Infinity, Infinity);
+      }
+      if (val > bestScore + 0.001) { bestScore = val; bestMoves = [n]; }
+      else if (Math.abs(val - bestScore) < 0.001) bestMoves.push(n);
+    }
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+  }
+
+  /* ================================================================
+     BLIND AI ENGINE — used for Easy / Hard. This never looks at
+     humanLineMasks at all, so it can't tell what your board looks
+     like or block you — it only tries to complete its own lines,
+     exactly like a player who can't see your card.
+  ================================================================ */
+  function evaluateMaskBlind(mask) {
+    let score = 0;
+    for (const m of aiLineMasks) {
+      const b = popcount(mask & m);
+      score += b === 5 ? 2000 : LINE_WEIGHT[b];
+    }
+    return score;
+  }
+
+  function searchBlind(mask, depth) {
+    const remaining = remainingNumbers(mask);
+    if (depth <= 0 || !remaining.length) return evaluateMaskBlind(mask);
+
+    const candidates = remaining
+      .map(n => ({ n, mask: mask | (1 << (n - 1)) }))
+      .sort((a, b) => evaluateMaskBlind(b.mask) - evaluateMaskBlind(a.mask))
+      .slice(0, Math.min(6, remaining.length));
+
+    let best = -Infinity;
+    for (const { mask: newMask } of candidates) {
+      const aiLines = linesComplete(aiLineMasks, newMask);
+      const val = aiLines >= 5 ? (100000 + depth) : searchBlind(newMask, depth - 1);
+      if (val > best) best = val;
+    }
+    return best;
+  }
+
+  // depth: how many of its own future moves it plans ahead.
+  // mistakeChance: probability it picks a random legal number instead
+  // of its best one (makes Easy genuinely beatable, Hard only rarely slips).
+  function aiChooseMoveBlind(depth, mistakeChance) {
+    const mask = state.selectedNums.reduce((m, n) => m | (1 << (n - 1)), 0);
+    const remaining = remainingNumbers(mask);
+
+    if (Math.random() < mistakeChance) {
+      return remaining[Math.floor(Math.random() * remaining.length)];
+    }
+
+    let bestScore = -Infinity, bestMoves = [];
+    for (const n of remaining) {
+      const newMask = mask | (1 << (n - 1));
+      const aiLines = linesComplete(aiLineMasks, newMask);
+      const val = aiLines >= 5 ? 999999 : searchBlind(newMask, depth - 1);
+      if (val > bestScore + 0.001) { bestScore = val; bestMoves = [n]; }
+      else if (Math.abs(val - bestScore) < 0.001) bestMoves.push(n);
+    }
+    return bestMoves[Math.floor(Math.random() * bestMoves.length)];
+  }
+
+  function triggerAIMove() {
+    if (state.gameOver || state.currentTurn === state.playerId) return;
+    let move;
+    if (state.aiDifficulty === 'easy') {
+      move = aiChooseMoveBlind(1, 0.4);       // shallow lookahead, misses often
+    } else if (state.aiDifficulty === 'hard') {
+      move = aiChooseMoveBlind(4, 0.08);      // plans ahead, rarely slips — still board-blind
+    } else {
+      move = aiChooseMove();                  // Next to Impossible: full minimax, sees both boards
+    }
+    makeMoveLocal(move, state.currentTurn);
+  }
+
+  /* ================================================================
      LINE DETECTION
   ================================================================ */
   function countLines(board, selected) {
@@ -1596,6 +1976,11 @@
   /* ================================================================
      BINGO BAR
   ================================================================ */
+  function resetBingoBars() {
+    document.querySelectorAll('#bingo-bar-you .bingo-letter, #bingo-bar-opp .bingo-letter')
+      .forEach(el => el.classList.remove('lit'));
+  }
+
   function updateBingoBar(barId, lines) {
     const bar = document.getElementById(barId);
     const letters = bar.querySelectorAll('.bingo-letter');
@@ -1657,7 +2042,8 @@
     if (!unselected.length) return;
     const n = unselected[Math.floor(Math.random() * unselected.length)];
     setGameMsg('⏰ Time up! Auto-selecting…', 'info');
-    await makeMove(n);
+    if (state.vsAI) makeMoveLocal(n, state.playerId);
+    else await makeMove(n);
   }
 
   /* ================================================================
@@ -1682,6 +2068,25 @@
   ================================================================ */
   window.playAgain = async function() {
     Sounds.click();
+
+    // VS Computer: instant local rematch, no Firebase round-trip needed
+    if (state.vsAI) {
+      document.getElementById('winner-overlay').classList.remove('active');
+      stopConfetti();
+      stopTimer();
+      state.gameStarted = false; state.gameOver = false;
+      state.myBoard = []; state.opponentBoard = [];
+      state.selectedNums = []; state.myLines = 0; state.oppLines = 0;
+      state.currentTurn = 'p2'; state.lastMoverId = null;
+      showScreen('setup-screen');
+      buildSetupGrid();
+      document.getElementById('ready-btn').style.display = 'block';
+      document.getElementById('random-fill-btn').style.display = 'block';
+      document.getElementById('waiting-ready-msg').style.display = 'none';
+      document.querySelectorAll('#setup-grid input').forEach(i => i.disabled = false);
+      return;
+    }
+
     if (!state.roomId) return;
     state.playAgainSent = true;
 
@@ -1768,8 +2173,11 @@
       myWins: 0, oppWins: 0,
       gameStarted: false, gameOver: false,
       timerInterval: null, timerSeconds: 30, unsubRoom: null,
-      playAgainSent: false, playAgainReceived: false
+      playAgainSent: false, playAgainReceived: false,
+      vsAI: false, aiThinking: false, aiDifficulty: 'hard'
     };
+    const oppBoardSection = document.getElementById('opp-board-section');
+    if (oppBoardSection) oppBoardSection.style.display = 'none';
     document.getElementById('create-room-info').style.display = 'none';
     document.querySelector('#create-screen .btn-primary').style.display = 'block';
     document.querySelector('#create-screen .btn-outline').style.display = 'block';
@@ -1783,6 +2191,15 @@
 
   window.leaveRoom = async function() {
     Sounds.click();
+
+    // VS Computer: nothing to notify, just reset locally
+    if (state.vsAI) {
+      const timerEl = document.querySelector('.timer-wrap');
+      if (timerEl) timerEl.style.display = '';
+      resetAndGoLobby();
+      return;
+    }
+
     const roomId = state.roomId;
     const playerName = state.playerName;
     // Notify opponent that this player left
